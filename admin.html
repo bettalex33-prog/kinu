@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Kinu Admin Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=DM+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0a0a;color:#f9fafb;font-family:'DM Sans','Segoe UI',sans-serif;padding:20px 16px 60px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{animation:spin .8s linear infinite}
+    input,select,textarea{background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;width:100%}
+    input::placeholder{color:#4b5563}
+    button{font-family:inherit;cursor:pointer}
+    .card{background:#111;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:12px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .badge-green{background:#052e16;color:#22c55e}
+    .badge-yellow{background:#2d1b00;color:#f59e0b}
+    .badge-red{background:#2d0a0a;color:#ef4444}
+    .badge-purple{background:#1e1033;color:#8b5cf6}
+    h2{font-size:18px;font-weight:800;margin-bottom:16px;color:#fff}
+    .tab-bar{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+    .tab{padding:7px 16px;border-radius:99px;border:1px solid #2a2a2a;background:transparent;color:#9ca3af;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+    .tab.active{background:#22c55e;color:#000;border-color:#22c55e}
+    .section{max-width:640px;margin:0 auto}
+    #login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;max-width:360px;margin:0 auto}
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div style="font-size:24px;color:#22c55e;font-family:'DM Mono',monospace;letter-spacing:-2px;margin-bottom:8px">〰 KINU</div>
+  <h1 style="font-size:20px;font-weight:800;margin-bottom:4px">Admin Panel</h1>
+  <p style="color:#6b7280;font-size:13px;margin-bottom:24px;text-align:center">Enter admin password to continue</p>
+  <input type="password" id="pwd-input" placeholder="Admin password" style="margin-bottom:12px;text-align:center"/>
+  <button onclick="checkPwd()" style="background:#22c55e;color:#000;border:none;padding:12px;border-radius:10px;font-weight:800;font-size:14px;width:100%">Login →</button>
+  <p id="pwd-err" style="color:#ef4444;font-size:12px;margin-top:10px;display:none">Wrong password. Try again.</p>
+  <p style="margin-top:20px;font-size:11px;color:#374151;text-align:center"><a href="/" style="color:#22c55e;text-decoration:none">← Back to Kinu</a></p>
+</div>
+
+<!-- ADMIN APP -->
+<div id="admin-app" style="display:none">
+  <div style="max-width:640px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #1f1f1f">
+      <div>
+        <div style="font-size:20px;color:#22c55e;font-family:'DM Mono',monospace;letter-spacing:-2px">〰 KINU</div>
+        <span style="font-size:12px;color:#6b7280">Admin Panel</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="admin-mode-badge" style="font-size:11px;font-family:'DM Mono',monospace;color:#22c55e"></span>
+        <a href="/" style="color:#6b7280;font-size:12px;text-decoration:none">← Back to app</a>
+        <button onclick="logout()" style="background:none;border:1px solid #2a2a2a;color:#6b7280;padding:5px 12px;border-radius:7px;font-size:12px">Logout</button>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar" style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap"></div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab active" onclick="showTab('pending')">⏳ Pending</button>
+      <button class="tab" onclick="showTab('locations')">📍 All Places</button>
+      <button class="tab" onclick="showTab('flagged')">🚩 Flagged Comments</button>
+      <button class="tab" onclick="showTab('add')">➕ Add Verified</button>
+    </div>
+
+    <div id="tab-pending" class="section"></div>
+    <div id="tab-locations" class="section" style="display:none"></div>
+    <div id="tab-flagged" class="section" style="display:none"></div>
+    <div id="tab-add" class="section" style="display:none">
+      <h2>➕ Add Verified Place</h2>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="font-size:12px;color:#9ca3af;font-weight:700">Place Name *</label>
+        <input id="add-name" placeholder="e.g. Equity Bank — Gigiri"/>
+        <label style="font-size:12px;color:#9ca3af;font-weight:700;margin-top:4px">Category</label>
+        <select id="add-cat">
+          <option>Bank</option><option>Shop</option><option>Office</option><option>Hospital</option><option>Post Office</option><option>Other</option>
+        </select>
+        <label style="font-size:12px;color:#9ca3af;font-weight:700;margin-top:4px">City</label>
+        <select id="add-city">
+          <option>Nairobi</option><option>Mombasa</option><option>Kisumu</option><option>Nakuru</option><option>Eldoret</option><option>Other</option>
+        </select>
+        <label style="font-size:12px;color:#9ca3af;font-weight:700;margin-top:4px">Address</label>
+        <input id="add-addr" placeholder="e.g. Gigiri, Nairobi"/>
+        <label style="font-size:12px;color:#9ca3af;font-weight:700;margin-top:4px">Latitude (optional)</label>
+        <input id="add-lat" placeholder="e.g. -1.2345" type="number" step="any"/>
+        <label style="font-size:12px;color:#9ca3af;font-weight:700;margin-top:4px">Longitude (optional)</label>
+        <input id="add-lng" placeholder="e.g. 36.8765" type="number" step="any"/>
+        <button onclick="addVerifiedPlace()" style="background:#22c55e;color:#000;border:none;padding:13px;border-radius:10px;font-weight:800;font-size:14px;margin-top:8px">Add Verified Place →</button>
+      </div>
+    </div>
+
+    <div id="loading-msg" style="text-align:center;color:#6b7280;padding:40px;font-size:13px">Loading…</div>
+  </div>
+</div>
+
+<script>
+const ADMIN_PWD="Alex33@Kinu2026!";
+let _db=null,_fs=null;
+
+function checkPwd(){
+  const v=document.getElementById("pwd-input").value;
+  if(v===ADMIN_PWD){
+    document.getElementById("login-screen").style.display="none";
+    document.getElementById("admin-app").style.display="block";
+    initFirebase();
+  }else{
+    document.getElementById("pwd-err").style.display="block";
+  }
+}
+document.getElementById("pwd-input").addEventListener("keydown",e=>e.key==="Enter"&&checkPwd());
+
+function logout(){document.getElementById("login-screen").style.display="flex";document.getElementById("admin-app").style.display="none";}
+
+function showTab(name){
+  ["pending","locations","flagged","add"].forEach(t=>{
+    document.getElementById("tab-"+t).style.display=t===name?"block":"none";
+  });
+  document.querySelectorAll(".tab").forEach((b,i)=>{
+    b.classList.toggle("active",["pending","locations","flagged","add"][i]===name);
+  });
+  if(name!=="add")loadTab(name);
+}
+
+async function initFirebase(){
+  try{
+    const{initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+    _fs=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const app=initializeApp({
+      apiKey:"AIzaSyBC6-NtIC4nQkcmYLZOYq1Pluc9aRX14qs",
+      authDomain:"kinu-75379.firebaseapp.com",
+      projectId:"kinu-75379",
+      storageBucket:"kinu-75379.firebasestorage.app",
+      messagingSenderId:"104893958892",
+      appId:"1:104893958892:web:4bc528457c3e746656b3c9"
+    });
+    _db=_fs.getFirestore(app);
+    document.getElementById("admin-mode-badge").textContent="● FIREBASE";
+    loadStats();
+    loadTab("pending");
+  }catch(e){
+    document.getElementById("admin-mode-badge").textContent="● OFFLINE";
+    document.getElementById("loading-msg").textContent="Firebase connection failed: "+e.message;
+  }
+}
+
+async function loadStats(){
+  if(!_db)return;
+  const[locSnap,pendSnap]=await Promise.all([
+    _fs.getDocs(_fs.collection(_db,"locations")),
+    _fs.getDocs(_fs.collection(_db,"pending_locations")),
+  ]);
+  const statsBar=document.getElementById("stats-bar");
+  statsBar.innerHTML=[
+    ["📍 Live Places",locSnap.size,"#22c55e"],
+    ["⏳ Pending",pendSnap.size,"#f59e0b"],
+  ].map(([label,val,color])=>`
+    <div style="background:#111;border:1px solid #2a2a2a;border-radius:10px;padding:10px 16px;flex:1;min-width:100px">
+      <div style="font-size:20px;font-weight:800;color:${color}">${val}</div>
+      <div style="font-size:11px;color:#6b7280">${label}</div>
+    </div>`).join("");
+}
+
+async function loadTab(name){
+  const el=document.getElementById("tab-"+name);
+  const lm=document.getElementById("loading-msg");
+  if(!_db){lm.textContent="Not connected to Firebase.";return;}
+  lm.style.display="block";lm.textContent="Loading…";
+  el.innerHTML="";
+
+  if(name==="pending"){
+    const snap=await _fs.getDocs(_fs.collection(_db,"pending_locations"));
+    lm.style.display="none";
+    if(snap.empty){el.innerHTML=`<div style="text-align:center;color:#4b5563;padding:40px;font-size:13px">No pending submissions! 🎉</div>`;return;}
+    snap.docs.forEach(d=>{
+      const p=d.data();
+      el.innerHTML+=`
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <strong style="font-size:15px">${p.name}</strong>
+              <span class="badge badge-yellow" style="margin-left:8px">⏳ Pending</span>
+            </div>
+          </div>
+          <p style="color:#6b7280;font-size:12px;margin-bottom:4px">${p.category} · ${p.city||""} · ${p.address}</p>
+          ${p.lat?`<p style="color:#4b5563;font-size:11px;font-family:'DM Mono',monospace">📍 ${p.lat?.toFixed(4)}, ${p.lng?.toFixed(4)}</p>`:"<p style='color:#4b5563;font-size:11px'>No coordinates</p>"}
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button onclick="approvePending('${d.id}',${JSON.stringify(p).replace(/'/g,"&apos;")})" style="flex:1;background:#22c55e;color:#000;border:none;padding:9px;border-radius:8px;font-weight:800;font-size:13px">✅ Approve</button>
+            <button onclick="rejectPending('${d.id}')" style="flex:1;background:#2d0a0a;color:#ef4444;border:1px solid #ef4444;padding:9px;border-radius:8px;font-weight:800;font-size:13px">❌ Reject</button>
+          </div>
+        </div>`;
+    });
+  }
+
+  if(name==="locations"){
+    const snap=await _fs.getDocs(_fs.query(_fs.collection(_db,"locations"),_fs.orderBy("createdAt","asc")));
+    lm.style.display="none";
+    if(snap.empty){el.innerHTML=`<div style="text-align:center;color:#4b5563;padding:40px;font-size:13px">No locations yet.</div>`;return;}
+    el.innerHTML=`<p style="color:#6b7280;font-size:12px;margin-bottom:16px">${snap.size} locations in database</p>`;
+    snap.docs.forEach(d=>{
+      const p=d.data();
+      el.innerHTML+=`
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+              <strong style="font-size:13px">${p.name}</strong>
+              ${p.verified?`<span class="badge badge-green">✓ Verified</span>`:""}
+            </div>
+            <p style="color:#6b7280;font-size:11px">${p.category} · ${p.city||""} · ${p.address}</p>
+          </div>
+          <button onclick="deleteLocation('${d.id}')" style="background:none;border:1px solid #2d0a0a;color:#ef4444;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:700;flex-shrink:0">Delete</button>
+        </div>`;
+    });
+  }
+
+  if(name==="flagged"){
+    const locsSnap=await _fs.getDocs(_fs.collection(_db,"locations"));
+    let found=0;
+    lm.style.display="none";
+    for(const ld of locsSnap.docs){
+      const cmtsSnap=await _fs.getDocs(_fs.query(_fs.collection(_db,"locations",ld.id,"comments"),_fs.where("reported","==",true)));
+      cmtsSnap.docs.forEach(cd=>{
+        found++;
+        const c=cd.data();
+        el.innerHTML+=`
+          <div class="card">
+            <p style="font-size:12px;color:#6b7280;margin-bottom:6px">📍 ${ld.data().name}</p>
+            <p style="font-size:13px;color:#e5e7eb;margin-bottom:10px">"${c.text}"</p>
+            <div style="display:flex;gap:8px">
+              <button onclick="hideComment('${ld.id}','${cd.id}')" style="flex:1;background:#2d0a0a;color:#ef4444;border:1px solid #ef4444;padding:8px;border-radius:8px;font-weight:700;font-size:12px">🗑 Remove</button>
+              <button onclick="clearReport('${ld.id}','${cd.id}')" style="flex:1;background:#111;color:#9ca3af;border:1px solid #2a2a2a;padding:8px;border-radius:8px;font-weight:700;font-size:12px">✅ Keep (clear flag)</button>
+            </div>
+          </div>`;
+      });
+    }
+    if(found===0)el.innerHTML=`<div style="text-align:center;color:#4b5563;padding:40px;font-size:13px">No flagged comments! 🎉</div>`;
+  }
+}
+
+async function approvePending(pendId,data){
+  if(!_db)return;
+  await _fs.addDoc(_fs.collection(_db,"locations"),{...data,approved:true,createdAt:Date.now()});
+  await _fs.deleteDoc(_fs.doc(_db,"pending_locations",pendId));
+  alert("✅ Place approved and live!");
+  loadStats();loadTab("pending");
+}
+
+async function rejectPending(pendId){
+  if(!confirm("Reject and delete this submission?"))return;
+  await _fs.deleteDoc(_fs.doc(_db,"pending_locations",pendId));
+  alert("❌ Submission rejected.");
+  loadStats();loadTab("pending");
+}
+
+async function deleteLocation(locId){
+  if(!confirm("Delete this location? This cannot be undone."))return;
+  await _fs.deleteDoc(_fs.doc(_db,"locations",locId));
+  alert("Deleted!");
+  loadStats();loadTab("locations");
+}
+
+async function hideComment(locId,cmtId){
+  await _fs.updateDoc(_fs.doc(_db,"locations",locId,"comments",cmtId),{hidden:true,reported:false});
+  alert("Comment hidden from users.");
+  loadTab("flagged");
+}
+
+async function clearReport(locId,cmtId){
+  await _fs.updateDoc(_fs.doc(_db,"locations",locId,"comments",cmtId),{reported:false});
+  alert("Flag cleared — comment stays visible.");
+  loadTab("flagged");
+}
+
+async function addVerifiedPlace(){
+  const name=document.getElementById("add-name").value.trim();
+  const cat=document.getElementById("add-cat").value;
+  const city=document.getElementById("add-city").value;
+  const addr=document.getElementById("add-addr").value.trim();
+  const lat=parseFloat(document.getElementById("add-lat").value)||null;
+  const lng=parseFloat(document.getElementById("add-lng").value)||null;
+  if(!name){alert("Place name is required.");return;}
+  if(!_db){alert("Not connected to Firebase.");return;}
+  await _fs.addDoc(_fs.collection(_db,"locations"),{
+    name,category:cat,city,address:addr||"No address",lat,lng,
+    verified:true,approved:true,createdAt:Date.now()
+  });
+  alert(`✅ "${name}" added as a verified place!`);
+  document.getElementById("add-name").value="";
+  document.getElementById("add-addr").value="";
+  document.getElementById("add-lat").value="";
+  document.getElementById("add-lng").value="";
+  loadStats();
+}
+</script>
+</body>
+</html>

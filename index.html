@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Kinu — Know Before You Go</title>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#22c55e"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Kinu"/>
+  <link rel="apple-touch-icon" href="/icon-192.png"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=DM+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0a0a;color:#f9fafb;font-family:'DM Sans','Segoe UI',sans-serif;overflow-x:hidden}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in{animation:fadeIn .25s ease both}
+    .slide-up{animation:slideUp .3s ease both}
+    .spin{animation:spin .8s linear infinite}
+    input::placeholder,textarea::placeholder{color:#4b5563}
+    select option{background:#1a1a1a;color:#fff}
+    ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#111}::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:3px}
+    .live-dot{display:inline-block;width:7px;height:7px;background:#22c55e;border-radius:50%;animation:blink 1.5s ease infinite;margin-right:5px}
+    /* Bottom nav */
+    #bnav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:#0d0d0d;border-top:1px solid #1f1f1f;display:flex;height:62px;padding-bottom:env(safe-area-inset-bottom)}
+    .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;cursor:pointer;color:#4b5563;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;transition:color .15s;padding:0}
+    .bnav-btn.active{color:#22c55e}
+    .bnav-icon{font-size:21px;line-height:1.2}
+    /* Leaflet popup */
+    .leaflet-popup-content-wrapper{background:#111!important;border:1px solid #2a2a2a!important;border-radius:14px!important;box-shadow:0 8px 32px rgba(0,0,0,.6)!important;color:#f9fafb!important}
+    .leaflet-popup-tip{background:#111!important}
+    .leaflet-popup-close-button{color:#6b7280!important;font-size:18px!important}
+    .leaflet-container{background:#1a1a1a}
+    /* Install banner */
+    .install-banner{position:fixed;bottom:70px;left:12px;right:12px;background:#111;border:1px solid #22c55e55;border-radius:16px;padding:14px 16px;z-index:200;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);animation:slideUp .3s ease both}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<!-- Firebase boot -->
+<script>
+window._kinuDB=null;window._kinuMode="loading";
+async function bootFirebase(cfg){
+  try{
+    const{initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+    const fs=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const app=initializeApp(cfg);
+    const db=fs.getFirestore(app);
+    const snap=await fs.getDocs(fs.collection(db,"locations"));
+    if(snap.empty){
+      const defs=[
+        {name:"City National Bank",category:"Bank",address:"CBD, Nairobi",lat:-1.2864,lng:36.8172,createdAt:Date.now()},
+        {name:"MegaMart Superstore",category:"Shop",address:"Main St., Nairobi",lat:-1.2921,lng:36.8219,createdAt:Date.now()+1},
+        {name:"DMV Office",category:"Office",address:"Government Center, Nairobi",lat:-1.3031,lng:36.8167,createdAt:Date.now()+2},
+        {name:"Central Post Office",category:"Post Office",address:"Kenyatta Ave., Nairobi",lat:-1.2833,lng:36.8167,createdAt:Date.now()+3},
+        {name:"City Hospital Pharmacy",category:"Hospital",address:"Health Campus, Nairobi",lat:-1.3012,lng:36.8062,createdAt:Date.now()+4},
+      ];
+      for(const d of defs)await fs.addDoc(fs.collection(db,"locations"),d);
+    }
+    window._kinuDB={db,...fs};
+    window._kinuMode="firebase";
+    window.dispatchEvent(new Event("kinu-ready"));
+  }catch(e){
+    console.error("Firebase failed:",e);
+    window._kinuMode="local";
+    window.dispatchEvent(new Event("kinu-ready"));
+  }
+}
+(function(){
+  const cfg={
+    apiKey:"AIzaSyBC6-NtIC4nQkcmYLZOYq1Pluc9aRX14qs",
+    authDomain:"kinu-75379.firebaseapp.com",
+    projectId:"kinu-75379",
+    storageBucket:"kinu-75379.firebasestorage.app",
+    messagingSenderId:"104893958892",
+    appId:"1:104893958892:web:4bc528457c3e746656b3c9"
+  };
+  bootFirebase(cfg);
+})();
+</script>
+
+<script type="text/babel">
+const{useState,useEffect,useCallback,useRef}=React;
+
+// ── Constants ──
+const CATS=["All","Bank","Shop","Office","Hospital","Post Office","Other"];
+const STATUS={
+  short:  {label:"Short Line",  color:"#22c55e",bg:"#052e16",emoji:"🟢",desc:"Walk right in!"},
+  medium: {label:"Medium Wait", color:"#f59e0b",bg:"#2d1b00",emoji:"🟡",desc:"~10–20 min wait"},
+  long:   {label:"Long Line",   color:"#ef4444",bg:"#2d0a0a",emoji:"🔴",desc:"Expect a long wait"},
+  unknown:{label:"No Reports",  color:"#6b7280",bg:"#1a1a1a",emoji:"⚪",desc:"Be the first!"},
+};
+
+function timeAgo(ts){
+  const m=Math.floor((Date.now()-ts)/60000);
+  if(m<1)return"just now";
+  if(m<60)return`${m}m ago`;
+  const h=Math.floor(m/60);
+  if(h<24)return`${h}h ago`;
+  return`${Math.floor(h/24)}d ago`;
+}
+function getStatus(reports){
+  const r=(reports||[]).filter(x=>Date.now()-x.ts<90*60*1000);
+  if(!r.length)return"unknown";
+  const c={short:0,medium:0,long:0};
+  r.forEach(x=>c[x.status]++);
+  return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// ── Local storage helpers ──
+const LK="kinu-local-v3";
+function localLoad(){try{return JSON.parse(localStorage.getItem(LK)||"null")||localDefaults()}catch{return localDefaults()}}
+function localDefaults(){return[
+  {id:"loc1",name:"City National Bank",category:"Bank",address:"CBD, Nairobi",lat:-1.2864,lng:36.8172,reports:[]},
+  {id:"loc2",name:"MegaMart Superstore",category:"Shop",address:"Main St., Nairobi",lat:-1.2921,lng:36.8219,reports:[]},
+  {id:"loc3",name:"DMV Office",category:"Office",address:"Government Center, Nairobi",lat:-1.3031,lng:36.8167,reports:[]},
+  {id:"loc4",name:"Central Post Office",category:"Post Office",address:"Kenyatta Ave., Nairobi",lat:-1.2833,lng:36.8167,reports:[]},
+  {id:"loc5",name:"City Hospital Pharmacy",category:"Hospital",address:"Health Campus, Nairobi",lat:-1.3012,lng:36.8062,reports:[]},
+]}
+function localSave(l){try{localStorage.setItem(LK,JSON.stringify(l))}catch{}}
+
+// ── Notification watch helpers ──
+const WK="kinu-watching-v2";
+function getWatched(){try{return JSON.parse(localStorage.getItem(WK)||"[]")}catch{return[]}}
+function saveWatched(ids){localStorage.setItem(WK,JSON.stringify(ids))}
+
+// ── Geocoding ──
+async function geocode(address){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address+" Kenya")}&format=json&limit=1`,{headers:{"Accept-Language":"en","User-Agent":"KinuApp/1.0"}});
+    const d=await r.json();
+    if(d[0])return{lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)};
+  }catch{}
+  return null;
+}
+
+// ─────────────────────────────────────────
+// CARD COMPONENT
+// ─────────────────────────────────────────
+function Card({loc,onOpen,flash}){
+  const st=getStatus(loc.reports),info=STATUS[st];
+  const last=[...(loc.reports||[])].sort((a,b)=>b.ts-a.ts)[0];
+  return(
+    <div className="fade-in" onClick={()=>onOpen(loc)}
+      style={{background:"#111",border:`1px solid ${flash===loc.id?info.color:"#2a2a2a"}`,borderRadius:16,padding:16,cursor:"pointer",transition:"border-color .3s",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <span style={{width:10,height:10,borderRadius:"50%",background:info.color,boxShadow:`0 0 10px ${info.color}`,flexShrink:0}}/>
+        <span style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:1}}>{loc.category}</span>
+        <span style={{marginLeft:"auto",fontSize:11,color:"#374151",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center"}}>
+          <span className="live-dot"/>LIVE
+        </span>
+      </div>
+      <h3 style={{fontSize:17,fontWeight:800,marginBottom:2}}>{loc.name}</h3>
+      <p style={{fontSize:13,color:"#4b5563",marginBottom:12}}>{loc.address}{loc.lat?" 📍":""}</p>
+      <div style={{borderRadius:10,padding:"10px 14px",border:`1px solid ${info.color}44`,background:info.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{color:info.color,fontWeight:700,fontSize:13}}>{info.emoji} {info.label}</span>
+        <span style={{fontSize:12,color:"#6b7280"}}>{info.desc}</span>
+      </div>
+      {last&&<p style={{marginTop:8,fontSize:12,color:"#374151"}}>Last report: {timeAgo(last.ts)}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// DETAIL COMPONENT
+// ─────────────────────────────────────────
+function Detail({loc,onBack,onReport,toast,watching,onToggleWatch}){
+  const st=getStatus(loc.reports),info=STATUS[st];
+  const hist=[...(loc.reports||[])].sort((a,b)=>b.ts-a.ts).slice(0,8);
+  const isWatching=watching.includes(loc.id);
+  const[comments,setComments]=useState([]);
+  const[comment,setComment]=useState("");
+  const[posting,setPosting]=useState(false);
+  const[cmtLoading,setCmtLoading]=useState(true);
+
+  useEffect(()=>{
+    if(window._kinuMode==="firebase"&&window._kinuDB){
+      const{db,collection,onSnapshot,query,orderBy,limit}=window._kinuDB;
+      try{
+        const q=query(collection(db,"locations",loc.id,"comments"),orderBy("ts","desc"),limit(25));
+        const unsub=onSnapshot(q,snap=>{
+          setComments(snap.docs.map(d=>({id:d.id,...d.data()})));
+          setCmtLoading(false);
+        },()=>{
+          // fallback without ordering
+          const unsub2=onSnapshot(collection(db,"locations",loc.id,"comments"),snap=>{
+            const all=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.ts-a.ts);
+            setComments(all);setCmtLoading(false);
+          });
+          return unsub2;
+        });
+        return()=>unsub();
+      }catch(e){setCmtLoading(false);}
+    }else{
+      try{
+        const c=JSON.parse(localStorage.getItem(`kinu-cmt-${loc.id}`)||"[]");
+        setComments([...c].reverse());
+      }catch{}
+      setCmtLoading(false);
+    }
+  },[loc.id]);
+
+  const postComment=async()=>{
+    if(!comment.trim()||posting)return;
+    setPosting(true);
+    const c={text:comment.trim(),ts:Date.now()};
+    if(window._kinuMode==="firebase"&&window._kinuDB){
+      const{db,collection,addDoc}=window._kinuDB;
+      await addDoc(collection(db,"locations",loc.id,"comments"),c);
+    }else{
+      const existing=JSON.parse(localStorage.getItem(`kinu-cmt-${loc.id}`)||"[]");
+      existing.push({...c,id:"c"+Date.now()});
+      localStorage.setItem(`kinu-cmt-${loc.id}`,JSON.stringify(existing));
+      setComments([c,...comments]);
+    }
+    setComment("");setPosting(false);
+  };
+
+  return(
+    <main style={{...S.main,paddingBottom:80}}>
+      <button onClick={onBack} style={S.back}>← Back</button>
+      <div style={{textAlign:"center",marginBottom:22}}>
+        <div style={{display:"inline-flex",flexDirection:"column",alignItems:"center",gap:6,padding:"18px 32px",borderRadius:20,background:info.color+"15",border:`2px solid ${info.color}44`,marginBottom:14}}>
+          <span style={{fontSize:48}}>{info.emoji}</span>
+          <span style={{fontSize:19,fontWeight:800,color:info.color}}>{info.label}</span>
+          <span style={{color:"#6b7280",fontSize:13}}>{info.desc}</span>
+        </div>
+        <h2 style={{fontSize:20,fontWeight:800,marginBottom:3}}>{loc.name}</h2>
+        <p style={{color:"#6b7280",fontSize:13}}>{loc.category} · {loc.address}</p>
+        <p style={{fontSize:11,color:"#22c55e",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:6}}>
+          <span className="live-dot"/>real-time · shared with all users
+        </p>
+        {/* Watch button */}
+        <button onClick={()=>onToggleWatch(loc.id)}
+          style={{marginTop:12,background:isWatching?"#052e16":"transparent",border:`1px solid ${isWatching?"#22c55e":"#2a2a2a"}`,color:isWatching?"#22c55e":"#6b7280",borderRadius:99,padding:"7px 16px",cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:700,transition:"all .2s"}}>
+          {isWatching?"🔔 Watching · Tap to unwatch":"🔔 Notify me when line clears"}
+        </button>
+      </div>
+
+      {toast&&(
+        <div style={{background:"#052e16",border:"1px solid #22c55e44",color:"#22c55e",borderRadius:12,padding:"12px 16px",textAlign:"center",fontSize:14,marginBottom:18}}>
+          ✅ Report submitted — <strong>{STATUS[toast].label}</strong>
+        </div>
+      )}
+
+      {/* Report buttons */}
+      <div style={{marginBottom:22}}>
+        <p style={{fontSize:13,fontWeight:600,color:"#9ca3af",textAlign:"center",marginBottom:12}}>What's the line like right now?</p>
+        <div style={{display:"flex",gap:8}}>
+          {["short","medium","long"].map(s=>{const si=STATUS[s];return(
+            <button key={s} onClick={()=>onReport(s)}
+              style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"14px 6px",borderRadius:14,border:`1px solid ${si.color}`,cursor:"pointer",fontFamily:"inherit",background:si.bg,color:si.color,transition:"transform .1s, opacity .15s"}}
+              onMouseDown={e=>e.currentTarget.style.transform="scale(.96)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}>
+              <span style={{fontSize:20}}>{si.emoji}</span>
+              <span style={{fontWeight:700,fontSize:12}}>{si.label}</span>
+            </button>
+          );})}
+        </div>
+      </div>
+
+      {/* Recent reports */}
+      {hist.length>0&&(
+        <div style={{background:"#111",border:"1px solid #1f1f1f",borderRadius:14,padding:14,marginBottom:14}}>
+          <p style={{fontSize:11,fontWeight:700,color:"#4b5563",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Recent Reports</p>
+          {hist.map((r,i)=>{const ri=STATUS[r.status];return(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid #1a1a1a",fontSize:13}}>
+              <span style={{color:ri.color}}>{ri.emoji} {ri.label}</span>
+              <span style={{color:"#4b5563",fontSize:12}}>{timeAgo(r.ts)}</span>
+            </div>
+          );})}
+        </div>
+      )}
+
+      {/* Comments */}
+      <div style={{background:"#111",border:"1px solid #1f1f1f",borderRadius:14,padding:14}}>
+        <p style={{fontSize:11,fontWeight:700,color:"#4b5563",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>💬 Comments</p>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input value={comment} onChange={e=>setComment(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&postComment()}
+            placeholder='e.g. "Only 2 tellers open today"'
+            style={{flex:1,background:"#0a0a0a",border:"1px solid #2a2a2a",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+          <button onClick={postComment} disabled={!comment.trim()||posting}
+            style={{background:"#22c55e",color:"#000",border:"none",borderRadius:10,padding:"0 16px",cursor:"pointer",fontWeight:800,fontSize:13,opacity:comment.trim()&&!posting?1:.35,transition:"opacity .2s"}}>
+            {posting?"…":"Send"}
+          </button>
+        </div>
+        {cmtLoading&&<p style={{color:"#4b5563",fontSize:13,textAlign:"center",padding:"8px 0"}}>Loading comments…</p>}
+        {!cmtLoading&&comments.length===0&&<p style={{color:"#374151",fontSize:13,textAlign:"center",padding:"8px 0"}}>No comments yet. Share what you see!</p>}
+        {comments.map((c,i)=>(
+          <div key={c.id||i} style={{padding:"10px 0",borderBottom:"1px solid #1a1a1a"}}>
+            <p style={{fontSize:13,color:"#e5e7eb",lineHeight:1.55}}>{c.text}</p>
+            <p style={{fontSize:11,color:"#4b5563",marginTop:3}}>{timeAgo(c.ts)}</p>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+// ─────────────────────────────────────────
+// MAP VIEW
+// ─────────────────────────────────────────
+function MapView({locations,onOpen}){
+  const containerRef=useRef(null);
+  const mapRef=useRef(null);
+  const markersRef=useRef([]);
+
+  useEffect(()=>{
+    const map=L.map(containerRef.current,{center:[-1.286,36.817],zoom:12});
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+      attribution:'© <a href="https://openstreetmap.org/copyright" style="color:#22c55e">OpenStreetMap</a>',maxZoom:19
+    }).addTo(map);
+    mapRef.current=map;
+    setTimeout(()=>map.invalidateSize(),200);
+    return()=>{if(mapRef.current){mapRef.current.remove();mapRef.current=null;}};
+  },[]);
+
+  useEffect(()=>{
+    if(!mapRef.current)return;
+    markersRef.current.forEach(m=>m.remove());
+    markersRef.current=[];
+    const withCoords=locations.filter(l=>l.lat&&l.lng);
+    withCoords.forEach(loc=>{
+      const st=getStatus(loc.reports),info=STATUS[st];
+      const m=L.circleMarker([loc.lat,loc.lng],{
+        radius:16,fillColor:info.color,color:"#0a0a0a",weight:3,fillOpacity:0.92
+      }).addTo(mapRef.current);
+      m.bindPopup(
+        `<div style="font-family:'DM Sans',sans-serif;min-width:160px;padding:4px 2px">` +
+        `<strong style="font-size:14px;color:#f9fafb">${loc.name}</strong><br/>` +
+        `<span style="color:${info.color};font-weight:700;font-size:13px">${info.emoji} ${info.label}</span><br/>` +
+        `<span style="color:#9ca3af;font-size:12px">${loc.category}</span><br/>` +
+        `<button onclick="window._kinuOpen('${loc.id}')" style="margin-top:8px;background:#22c55e;color:#000;border:none;padding:7px 12px;border-radius:8px;cursor:pointer;font-weight:800;font-size:12px;width:100%;font-family:inherit">Report Line →</button>` +
+        `</div>`
+      );
+      markersRef.current.push(m);
+    });
+    if(withCoords.length>0){
+      try{
+        const g=L.featureGroup(markersRef.current);
+        mapRef.current.fitBounds(g.getBounds().pad(0.35));
+      }catch{}
+    }
+  },[locations]);
+
+  const noCoords=locations.filter(l=>!l.lat||!l.lng);
+  return(
+    <div style={{height:"calc(100vh - 114px)",position:"relative"}}>
+      <div ref={containerRef} style={{height:"100%",width:"100%"}}/>
+      {noCoords.length>0&&(
+        <div style={{position:"absolute",bottom:12,left:12,right:12,background:"rgba(13,13,13,.95)",border:"1px solid #2a2a2a",borderRadius:12,padding:"10px 14px",fontSize:12,color:"#6b7280",zIndex:1000,backdropFilter:"blur(8px)"}}>
+          💡 {noCoords.length} place{noCoords.length>1?"s":""} not on map — add an address when creating a place to pin it here.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// ADD VIEW
+// ─────────────────────────────────────────
+function AddView({onBack,onAdd}){
+  const[form,setForm]=useState({name:"",category:"Shop",address:""});
+  const[saving,setSaving]=useState(false);
+  const[geocoding,setGeocoding]=useState(false);
+
+  const handle=async()=>{
+    if(!form.name.trim()||saving)return;
+    setSaving(true);
+    let coords=null;
+    if(form.address.trim()){
+      setGeocoding(true);
+      coords=await geocode(form.address);
+      setGeocoding(false);
+    }
+    await onAdd({...form,...(coords||{})});
+    setSaving(false);
+  };
+
+  return(
+    <main style={{...S.main,paddingBottom:80}}>
+      <button onClick={onBack} style={S.back}>← Back</button>
+      <h2 style={{fontSize:24,fontWeight:800,letterSpacing:-.5,marginBottom:6}}>Add a Place</h2>
+      <p style={{color:"#6b7280",fontSize:13,marginBottom:24,lineHeight:1.6}}>Help your community by adding a location — your address will automatically place it on the map. 📍</p>
+      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+        <label style={S.label}>Place Name *</label>
+        <input style={S.input} placeholder="e.g. Equity Bank - Tom Mboya St." value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+        <label style={S.label}>Category</label>
+        <select style={S.input} value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+          {CATS.filter(c=>c!=="All").map(c=><option key={c}>{c}</option>)}
+        </select>
+        <label style={S.label}>Address (places it on the map 📍)</label>
+        <input style={S.input} placeholder="e.g. Tom Mboya St, Nairobi CBD" value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))}/>
+        {geocoding&&(
+          <p style={{fontSize:12,color:"#22c55e",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",gap:6}}>
+            <span style={{width:10,height:10,borderRadius:"50%",border:"2px solid #22c55e",borderTopColor:"transparent",display:"inline-block"}} className="spin"/>
+            Finding on map…
+          </p>
+        )}
+        <button onClick={handle} disabled={!form.name.trim()||saving}
+          style={{...S.addBtn,marginTop:16,padding:"14px",fontSize:15,borderRadius:12,opacity:form.name.trim()&&!saving?1:.35}}>
+          {saving?"Adding place…":"Add Place →"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+// ─────────────────────────────────────────
+// BOTTOM NAV
+// ─────────────────────────────────────────
+function BottomNav({view,setView}){
+  const tabs=[
+    {id:"home",icon:"🏠",label:"Home"},
+    {id:"map", icon:"🗺️",label:"Map"},
+    {id:"add", icon:"＋",label:"Add"},
+  ];
+  return(
+    <nav id="bnav">
+      {tabs.map(t=>(
+        <button key={t.id} className={`bnav-btn${view===t.id?" active":""}`} onClick={()=>setView(t.id)}>
+          <span className="bnav-icon">{t.icon}</span>
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ─────────────────────────────────────────
+// MAIN APP
+// ─────────────────────────────────────────
+function App(){
+  const[ready,setReady]=useState(false);
+  const[mode,setMode]=useState("loading");
+  const[locs,setLocs]=useState([]);
+  const[filter,setFilter]=useState("All");
+  const[view,setView]=useState("home");
+  const[selected,setSelected]=useState(null);
+  const[toast,setToast]=useState(null);
+  const[flash,setFlash]=useState(null);
+  const[watching,setWatching]=useState(getWatched);
+  const[installPrompt,setInstallPrompt]=useState(null);
+  const[showInstall,setShowInstall]=useState(false);
+  const unsubRef=useRef(null);
+  const prevStatusRef=useRef({});
+
+  // PWA install prompt capture
+  useEffect(()=>{
+    const h=e=>{e.preventDefault();setInstallPrompt(e);setShowInstall(true);};
+    window.addEventListener("beforeinstallprompt",h);
+    return()=>window.removeEventListener("beforeinstallprompt",h);
+  },[]);
+
+  // Map popup bridge
+  useEffect(()=>{
+    window._kinuOpen=(id)=>{
+      const loc=locs.find(l=>l.id===id);
+      if(loc){setSelected(loc);setView("detail");}
+    };
+  },[locs]);
+
+  // Firebase/local boot
+  useEffect(()=>{
+    const onReady=()=>{setMode(window._kinuMode);setReady(true);};
+    window.addEventListener("kinu-ready",onReady);
+    if(window._kinuMode&&window._kinuMode!=="loading")onReady();
+    return()=>window.removeEventListener("kinu-ready",onReady);
+  },[]);
+
+  // Subscribe to locations
+  useEffect(()=>{
+    if(!ready)return;
+    if(mode==="firebase"&&window._kinuDB){
+      const{db,collection,onSnapshot,query,orderBy,getDocs}=window._kinuDB;
+      const q=query(collection(db,"locations"),orderBy("createdAt","asc"));
+      unsubRef.current=onSnapshot(q,async snap=>{
+        const list=[];
+        for(const ds of snap.docs){
+          const d=ds.data();
+          const rs=await getDocs(collection(db,"locations",ds.id,"reports"));
+          list.push({id:ds.id,...d,reports:rs.docs.map(r=>r.data())});
+        }
+        setLocs(list);
+        setSelected(prev=>prev?(list.find(l=>l.id===prev.id)||prev):prev);
+      });
+      return()=>unsubRef.current&&unsubRef.current();
+    }else{
+      setLocs(localLoad());
+    }
+  },[ready,mode]);
+
+  // 🔔 Notification polling for watched locations
+  useEffect(()=>{
+    if(!watching.length||mode!=="firebase")return;
+    const check=async()=>{
+      if(!window._kinuDB)return;
+      const{db,collection,getDocs}=window._kinuDB;
+      for(const id of watching){
+        try{
+          const rs=await getDocs(collection(db,"locations",id,"reports"));
+          const reports=rs.docs.map(d=>d.data());
+          const cur=getStatus(reports);
+          const prev=prevStatusRef.current[id];
+          if(prev&&prev!=="short"&&prev!=="unknown"&&cur==="short"){
+            const loc=locs.find(l=>l.id===id);
+            if(loc&&"Notification"in window&&Notification.permission==="granted"){
+              new Notification("🟢 Line cleared — Kinu",{
+                body:`${loc.name} now has a short line. Walk right in!`,
+                icon:"/icon-192.png",
+                tag:id,
+              });
+            }
+          }
+          prevStatusRef.current[id]=cur;
+        }catch{}
+      }
+    };
+    const iv=setInterval(check,60000);
+    check();
+    return()=>clearInterval(iv);
+  },[watching,locs,mode]);
+
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2500);};
+
+  const submitReport=async(locId,status)=>{
+    const rep={status,ts:Date.now()};
+    if(mode==="firebase"&&window._kinuDB){
+      const{db,collection,addDoc}=window._kinuDB;
+      await addDoc(collection(db,"locations",locId,"reports"),rep);
+    }else{
+      const upd=locs.map(l=>l.id!==locId?l:{...l,reports:[...(l.reports||[]).slice(-29),rep]});
+      setLocs(upd);localSave(upd);
+    }
+    setFlash(locId);showToast(status);
+    setTimeout(()=>setFlash(null),2000);
+  };
+
+  const addLocation=async form=>{
+    const loc={
+      name:form.name.trim(),
+      category:form.category,
+      address:form.address.trim()||"No address given",
+      lat:form.lat||null,
+      lng:form.lng||null,
+      createdAt:Date.now()
+    };
+    if(mode==="firebase"&&window._kinuDB){
+      const{db,collection,addDoc}=window._kinuDB;
+      await addDoc(collection(db,"locations"),loc);
+    }else{
+      const nl={...loc,id:"loc"+Date.now(),reports:[]};
+      const upd=[...locs,nl];setLocs(upd);localSave(upd);
+    }
+    setView("home");
+  };
+
+  const toggleWatch=async id=>{
+    if("Notification"in window&&Notification.permission==="default"){
+      const perm=await Notification.requestPermission();
+      if(perm!=="granted"){
+        alert("To get notifications, please allow them in your browser settings.");
+        return;
+      }
+    }
+    const w=getWatched();
+    const idx=w.indexOf(id);
+    if(idx>-1)w.splice(idx,1);else w.push(id);
+    saveWatched(w);setWatching([...w]);
+  };
+
+  const installApp=async()=>{
+    if(!installPrompt)return;
+    installPrompt.prompt();
+    const{outcome}=await installPrompt.userChoice;
+    if(outcome==="accepted"){setInstallPrompt(null);setShowInstall(false);}
+  };
+
+  const goTo=(v)=>{setView(v);if(v!=="detail")setSelected(null);};
+
+  if(!ready)return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:14}}>
+      <div style={{width:32,height:32,borderRadius:"50%",border:"3px solid #22c55e",borderTopColor:"transparent"}} className="spin"/>
+      <span style={{color:"#6b7280",fontFamily:"'DM Mono',monospace",fontSize:13}}>Loading Kinu…</span>
+    </div>
+  );
+
+  const filtered=filter==="All"?locs:locs.filter(l=>l.category===filter);
+  const curLoc=selected?(locs.find(l=>l.id===selected.id)||selected):null;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f9fafb",overflowX:"hidden"}}>
+      {/* BG grid */}
+      <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.018) 1px,transparent 1px)",backgroundSize:"40px 40px",pointerEvents:"none"}}/>
+
+      {/* Header */}
+      <header style={{position:"sticky",top:0,zIndex:50,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 18px",background:"rgba(10,10,10,.92)",backdropFilter:"blur(14px)",borderBottom:"1px solid #1f1f1f"}}>
+        <button onClick={()=>goTo("home")} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:20,color:"#22c55e",letterSpacing:-2}}>〰</span>
+          <span style={{fontSize:16,color:"#fff",letterSpacing:2,fontFamily:"'DM Mono',monospace"}}>KI<strong>NU</strong></span>
+        </button>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:11,color:"#22c55e",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center"}}>
+            <span className="live-dot"/>LIVE
+          </span>
+          {showInstall&&(
+            <button onClick={installApp}
+              style={{background:"#22c55e",color:"#000",border:"none",padding:"6px 12px",borderRadius:8,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              📱 Install App
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Install banner */}
+      {showInstall&&view==="home"&&(
+        <div className="install-banner">
+          <span style={{fontSize:28}}>📱</span>
+          <div style={{flex:1}}>
+            <p style={{fontSize:14,fontWeight:800,marginBottom:2,color:"#fff"}}>Install Kinu</p>
+            <p style={{fontSize:12,color:"#6b7280"}}>Add to your home screen for quick access — works offline too!</p>
+          </div>
+          <button onClick={installApp} style={{background:"#22c55e",color:"#000",border:"none",padding:"8px 14px",borderRadius:8,fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>Install</button>
+          <button onClick={()=>setShowInstall(false)} style={{background:"none",border:"none",color:"#4b5563",cursor:"pointer",fontSize:20,padding:"0 2px",flexShrink:0}}>×</button>
+        </div>
+      )}
+
+      {/* HOME */}
+      {view==="home"&&(
+        <main style={S.main}>
+          <div style={{textAlign:"center",marginBottom:22}}>
+            <h1 style={{fontSize:30,fontWeight:800,letterSpacing:-1,background:"linear-gradient(135deg,#fff 0%,#9ca3af 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:6}}>Is the line long?</h1>
+            <p style={{color:"#6b7280",fontSize:14}}>Live crowd-reported wait times — by everyone, for everyone.</p>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:20}}>
+            {CATS.map(cat=>(
+              <button key={cat} onClick={()=>setFilter(cat)}
+                style={{padding:"5px 13px",borderRadius:99,border:`1px solid ${filter===cat?"#22c55e":"#2a2a2a"}`,background:filter===cat?"#22c55e":"transparent",color:filter===cat?"#000":"#9ca3af",cursor:"pointer",fontSize:12,fontWeight:filter===cat?800:500,transition:"all .15s"}}>
+                {cat}
+              </button>
+            ))}
+          </div>
+          {filtered.map(loc=><Card key={loc.id} loc={loc} onOpen={l=>{setSelected(l);setView("detail");}} flash={flash}/>)}
+          {filtered.length===0&&(
+            <div style={{textAlign:"center",color:"#4b5563",padding:"40px 20px",lineHeight:2}}>
+              No places in this category yet.<br/>
+              <button onClick={()=>setView("add")} style={{background:"none",border:"none",color:"#22c55e",cursor:"pointer",fontWeight:800,fontSize:14,fontFamily:"inherit"}}>Add one →</button>
+            </div>
+          )}
+        </main>
+      )}
+
+      {view==="detail"&&curLoc&&(
+        <Detail loc={curLoc} onBack={()=>{setView("home");setSelected(null);}} onReport={s=>submitReport(curLoc.id,s)} toast={toast} watching={watching} onToggleWatch={toggleWatch}/>
+      )}
+
+      {view==="add"&&<AddView onBack={()=>setView("home")} onAdd={addLocation}/>}
+
+      {view==="map"&&<MapView locations={locs} onOpen={l=>{setSelected(l);setView("detail");}}/>}
+
+      <BottomNav view={view==="detail"?"home":view} setView={goTo}/>
+    </div>
+  );
+}
+
+const S={
+  main:{position:"relative",zIndex:1,maxWidth:560,margin:"0 auto",padding:"20px 14px 80px"},
+  back:{background:"none",border:"none",color:"#9ca3af",cursor:"pointer",fontSize:14,marginBottom:18,padding:0,fontFamily:"inherit"},
+  addBtn:{background:"#22c55e",color:"#000",border:"none",cursor:"pointer",borderRadius:8,fontWeight:800,fontFamily:"inherit",width:"100%"},
+  label:{fontSize:13,fontWeight:700,color:"#9ca3af",marginBottom:4,marginTop:12,display:"block"},
+  input:{background:"#111",border:"1px solid #2a2a2a",borderRadius:10,padding:"12px 14px",color:"#fff",fontSize:14,fontFamily:"inherit",outline:"none",width:"100%"},
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<script>
+if("serviceWorker"in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("/sw.js").catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
